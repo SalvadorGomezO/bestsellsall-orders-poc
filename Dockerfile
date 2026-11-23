@@ -20,7 +20,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Actualizacion de herramientas internas de empaquetado Python (wheel/setuptools)
-RUN pip install --no-cache-dir --upgrade "pip" "setuptools>=78.1.1" "wheel>=0.46.2"
+RUN pip install --no-cache-dir --upgrade --ignore-installed "pip" "setuptools>=78.1.1" "wheel>=0.46.2"
 
 # Creacion de grupo y usuario sin privilegios (Non-Root UID 10001)
 RUN groupadd --gid 10001 appgroup && \
