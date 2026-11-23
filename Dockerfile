@@ -1,14 +1,18 @@
-# --- ETAPA 1: Builder (Compilacion aislada de dependencias) ---
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim AS runtime
 
-WORKDIR /build
+WORKDIR /app
 
-# Evita archivos .pyc y habilita salida sin buffer
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# Parcheo de paquetes del SO base (ej. zlib1g) y limpieza de cache APT
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Actualizacion de herramientas internas de empaquetado Python (wheel/setuptools) para mitigar CVEs transitivos
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Creacion de grupo y usuario sin privilegios (Non-Root UID 10001)
+RUN groupadd --gid 10001 appgroup && \
+    useradd --uid 10001 --gid appgroup --shell /usr/sbin/nologin --create-home appuser
 
 # --- ETAPA 2: Runtime (Imagen minima endurecida) ---
 FROM python:3.11-slim AS runtime
