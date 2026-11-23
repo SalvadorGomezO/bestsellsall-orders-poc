@@ -50,7 +50,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Escaneo SCA de dependencias y Security Gate (CRITICAL/HIGH parcheables)
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -76,7 +76,7 @@ jobs:
           docker build -t bestsellsall-orders-service:${{ github.sha }} .
 
       - name: Escaneo de Vulnerabilidades en Imagen Final (OS + App - Security Gate 3)
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: 'bestsellsall-orders-service:${{ github.sha }}'
           format: 'table'
@@ -86,7 +86,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Generacion de SBOM en formato estandar CycloneDX (SLSA)
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: 'bestsellsall-orders-service:${{ github.sha }}'
           format: 'cyclonedx'
