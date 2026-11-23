@@ -1,0 +1,100 @@
+name: BestSellSall - DevSecOps Supply Chain Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# Principio de Minimo Privilegio: el pipeline corre sin permisos de escritura ni credenciales Cloud
+permissions:
+  contents: read
+
+jobs:
+  # =========================================================================
+  # ETAPA 1: SAST y Escaneo de Secretos (Shift-Left / Fail-Fast)
+  # =========================================================================
+  etapa1-sast-y-secretos:
+    name: "Etapa 1: SAST (Semgrep) y Secretos (Gitleaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del codigo fuente
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Escaneo de Secretos en historial Git (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Analisis Estatico de Codigo Propio - SAST (Semgrep)
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/python
+            p/flask
+            p/owasp-top-ten
+        env:
+          SEMGREP_APP_TOKEN: ""
+
+  # =========================================================================
+  # ETAPA 2: SCA de Dependencias de Terceros (Security Gate 2)
+  # =========================================================================
+  etapa2-sca-dependencias:
+    name: "Etapa 2: SCA Dependencias (Trivy fs)"
+    runs-on: ubuntu-latest
+    needs: etapa1-sast-y-secretos
+    steps:
+      - name: Checkout del codigo fuente
+        uses: actions/checkout@v4
+
+      - name: Escaneo SCA de dependencias y Security Gate (CRITICAL/HIGH parcheables)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'library'
+          severity: 'CRITICAL,HIGH'
+
+  # =========================================================================
+  # ETAPA 3 y 4: Build Inmutable, Escaneo de Imagen y Generacion de SBOM
+  # =========================================================================
+  etapa3-y-4-build-imagen-sbom:
+    name: "Etapa 3 y 4: Build Inmutable, Trivy Image y SBOM CycloneDX"
+    runs-on: ubuntu-latest
+    needs: etapa2-sca-dependencias
+    steps:
+      - name: Checkout del codigo fuente
+        uses: actions/checkout@v4
+
+      - name: Construccion de Imagen Docker Multi-Stage (Non-Root)
+        run: |
+          docker build -t bestsellsall-orders-service:${{ github.sha }} .
+
+      - name: Escaneo de Vulnerabilidades en Imagen Final (OS + App - Security Gate 3)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: 'bestsellsall-orders-service:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Generacion de SBOM en formato estandar CycloneDX (SLSA)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: 'bestsellsall-orders-service:${{ github.sha }}'
+          format: 'cyclonedx'
+          output: 'bestsellsall-orders-sbom.cdx.json'
+
+      - name: Publicacion del Artefacto SBOM para Trazabilidad y Auditoria
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx-${{ github.sha }}
+          path: bestsellsall-orders-sbom.cdx.json
+          retention-days: 30
